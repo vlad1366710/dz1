@@ -1,0 +1,196 @@
+-- Создание базы данных
+create database location_service_db;
+-- Включение расширения PostGIS для работы с геоданными
+CREATE EXTENSION postgis;
+
+-- Таблица пользователей
+Create table пользователи (
+    id serial primary key,
+    username varchar(50) not null,
+    email varchar(100) not null unique,
+    profile_data json
+);
+
+-- Таблица точек интереса
+CREATE table точки_интереса(
+    id serial primary key,
+    name varchar(100) not null,
+    description text,
+    location GEOGRAPHY(Point, 4326), -- Используем тип GEOGRAPHY для хранения координат
+    attributes jsonb
+);
+
+-- Таблица отзывов
+create table  отзывы(
+    id serial primary key,
+    user_id int references пользователи (id),
+    point_id int references точки_интереса (id),
+    rating int check ( rating >= 1  and rating <= 5 ),
+    comments text,
+    created_at timestamp default current_timestamp
+);
+
+
+-- Создание индексов для оптимизации
+    -- Индекс для поиска по username
+CREATE INDEX idx_users_username ON пользователи(username);
+-- Индекс для поиска по email
+create index idx_пользователи_email on пользователи(email);
+-- Пространственный индекс для location
+create index idx_точки_интереса_location on точки_интереса using  gist(location);
+-- Индекс для поиска отзывов по poi_id
+create index  idx_отзывы_point_id on отзывы(point_id);
+-- Индекс для поиска отзывов по user_id
+create  index  idx_отзывы_user_id on отзывы(user_id);
+
+INSERT INTO пользователи (username, email, profile_data) VALUES
+('user1', 'user1@example.com', '{"age": 25, "city": "Москва"}'),
+('user2', 'user2@example.com', '{"age": 30, "city": "Санкт-Питербург"}'),
+('user3', 'user3@example.com', '{"age": 22, "city": "Новосибирск"}'),
+('user4', 'user4@example.com', '{"age": 28, "city": "Екатиренбург"}'),
+('user5', 'user5@example.com', '{"age": 35, "city": "Казань"}'),
+('user6', 'user6@example.com', '{"age": 40, "city": "Челябинск"}'),
+('user7', 'user7@example.com', '{"age": 27, "city": "Омск"}'),
+('user8', 'user8@example.com', '{"age": 33, "city": "Самара"}'),
+('user9', 'user9@example.com', '{"age": 29, "city": "Ростов"}'),
+('user10', 'user10@example.com', '{"age": 31, "city": "Уфа"}');
+
+INSERT INTO точки_интереса (name, description, location, attributes) VALUES
+('Красная площадь', 'Историческая площадь в Москве', ST_SetSRID(ST_MakePoint(37.621, 55.753), 4326), '{"категория": "достопримечательность", "плата": "бесплатно"}'),
+('Эрмитаж', 'Художественный музей в Санкт-Петербурге', ST_SetSRID(ST_MakePoint(30.296, 59.939), 4326), '{"категория": "музей", "плата": "платно"}'),
+('Новосибирский зоопарк', 'Зоопарк в Новосибирске', ST_SetSRID(ST_MakePoint(82.924, 55.059), 4326), '{"категория": "зоопарк", "плата": "платно"}'),
+('Казанский Кремль', 'Исторический комплекс в Казани', ST_SetSRID(ST_MakePoint(49.106, 55.796), 4326), '{"категория": "достопримечательность", "плата": "бесплатно"}'),
+('Челябинский театр оперы и балета', 'Оперный театр в Челябинске', ST_SetSRID(ST_MakePoint(61.402, 55.160), 4326), '{"категория": "театр", "плата": "платно"}'),
+('Омская крепость', 'Историческая крепость в Омске', ST_SetSRID(ST_MakePoint(73.369, 54.991), 4326), '{"категория": "достопримечательность", "плата": "бесплатно"}'),
+('Набережная Самары', 'Прогулочная зона у реки в Самаре', ST_SetSRID(ST_MakePoint(50.094, 53.186), 4326), '{"категория": "парк", "плата": "бесплатно"}'),
+('Ростовский Кремль', 'Исторический комплекс в Ростове', ST_SetSRID(ST_MakePoint(39.415, 57.185), 4326), '{"категория": "достопримечательность", "плата": "бесплатно"}'),
+('Арена Уфы', 'Спортивная арена в Уфе', ST_SetSRID(ST_MakePoint(56.038, 54.738), 4326), '{"категория": "спорт", "плата": "платно"}'),
+('Екатеринбургский цирк', 'Цирк в Екатеринбурге', ST_SetSRID(ST_MakePoint(60.597, 56.838), 4326), '{"категория": "развлечение", "плата": "платно"}');
+
+
+INSERT INTO отзывы (user_id, point_id, rating, comments) VALUES
+(1, 1, 5, 'Удивительное место!'),
+(2, 2, 4, 'Отличный музей, но многолюдно.'),
+(3, 3, 5, 'Мне очень понравился зоопарк!'),
+(4, 4, 4, 'Красивый исторический объект.'),
+(5, 5, 3, 'Хорошее представление, но дорого.'),
+(6, 6, 5, 'Очень интересная история.'),
+(7, 7, 4, 'Хорошее место для прогулок.'),
+(8, 8, 5, 'Ошеломляющая архитектура.'),
+(9, 9, 4, 'Отличные спортивные события.'),
+(10, 10, 3, 'Весело, но немного дорого.');
+
+-- а. Получение всех ТИ в радиусе 5 км вокруг заданной точки
+select name, description from точки_интереса
+where st_dwithin(location, st_setsrid(st_makepoint(37.621,55.753),4326),5000);
+
+-- б. Извлечение первых 5 самых высоко оцениваемых ТИ
+select name, avg(rating) as avg_rating from точки_интереса point
+join отзывы о on point.id = о.point_id
+group by point.id
+order by avg_rating desc limit 5;
+
+-- в. Получение всех отзывов для конкретной ТИ, включая имя пользователя
+select username, rating, comments from отзывы
+join пользователи п on п.id = отзывы.user_id
+where point_id = 2;
+
+-- д. Обновление JSONB-поля «атрибуты» точки интереса
+update точки_интереса set  attributes = attributes || '{ "new_key": "new_value" }';
+
+-- е. Поиск всех пользователей, у которых в JSON-профиле есть конкретный ключ
+select  username, email from пользователи
+where profile_data ? 'city';
+
+-- Создание вида, объединяющего информацию из трех таблиц
+create view point_reviews as
+    select  name, username, rating, comments, created_at
+from отзывы r
+join пользователи п on п.id = r.user_id
+join точки_интереса ти on r.point_id = ти.id;
+
+-- Часть 3: Расширенные возможности
+-- 1. Хранимая процедура для добавления отзыва и обновления среднего рейтинга
+CREATE OR REPLACE FUNCTION add_review_and_update_rating(
+    user_id INT,
+    point_id INT,
+    rating INT,
+    comments TEXT
+) RETURNS VOID AS $$
+BEGIN
+      -- Добавление отзыва
+    INSERT INTO отзывы (user_id, point_id, rating, comments)
+    VALUES (user_id, point_id, rating, comments);
+   -- Обновление среднего рейтинга
+    UPDATE точки_интереса
+    SET attributes = jsonb_set(attributes, '{avg_rating}', to_jsonb((SELECT AVG(rating) FROM отзывы WHERE отзывы.point_id = $2)))
+    WHERE id = $2;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 2. Триггер для обновления timestamp последнего обновления
+CREATE OR REPLACE FUNCTION update_last_modified() RETURNS TRIGGER AS $$
+BEGIN
+    NEW.created_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_last_modified
+BEFORE INSERT ON отзывы
+FOR EACH ROW
+EXECUTE FUNCTION update_last_modified();
+
+-- 3. CTE для поиска пользователей, которые оценили более 3 точек интереса
+WITH user_reviews AS (
+    SELECT user_id, COUNT(*) AS num_reviews
+    FROM отзывы
+    GROUP BY user_id
+)
+SELECT u.username, ur.num_reviews
+FROM пользователи u
+JOIN user_reviews ur ON u.id = ur.user_id
+WHERE ur.num_reviews > 3;
+
+
+-- 5. Запрос с использованием функций окна для ранжирования ТИ по категориям
+
+SELECT name, category, avg_rating,
+       RANK() OVER (PARTITION BY category ORDER BY avg_rating DESC) AS rank
+FROM (
+    SELECT poi.name, poi.attributes->>'category' AS category, AVG(r.rating) AS avg_rating
+    FROM точки_интереса poi
+    JOIN отзывы r ON poi.id = r.point_id
+    GROUP BY poi.id, poi.attributes->>'category'
+) AS subquery;
+
+-- Часть 4: Анализ и оптимизация
+-- 1. Использование EXPLAIN ANALYZE
+
+EXPLAIN ANALYZE
+SELECT name, description
+FROM точки_интереса
+WHERE ST_DWithin(location, ST_SetSRID(ST_MakePoint(37.621, 55.753), 4326), 5000);
+
+
+EXPLAIN ANALYZE
+SELECT poi.name, AVG(r.rating) AS avg_rating
+FROM точки_интереса poi
+JOIN отзывы r ON poi.id = r.point_id
+GROUP BY poi.id
+ORDER BY avg_rating DESC
+LIMIT 5;
+
+
+-- 2. Оптимизация: Добавление индекса на rating в таблице reviews
+CREATE INDEX idx_reviews_rating ON отзывы(rating);
+
+CREATE INDEX idx_точки_интереса_location_gist ON точки_интереса USING GIST(location);
+
+
+
+select * from пользователи;
+
+drop table отзывы;
+drop table точки_интереса;
+drop table пользователи;
